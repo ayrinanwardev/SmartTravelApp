@@ -1,0 +1,90 @@
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: wanderly-api
+  # Secrets (Supabase password, JWT secret...) can live in backend/.env (git-ignored).
+  # See .env.example. Real environment variables still win over the file.
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/wanderly}
+    username: ${DB_USERNAME:wanderly}
+    password: ${DB_PASSWORD:wanderly}
+  jpa:
+    # Creates/updates tables from the entities. Switch to Flyway migrations before going to production.
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        # Load lazy collections (gallery, attractions, reviews...) for many rows in one query
+        # instead of one query per row. Matters a lot with a remote DB like Supabase.
+        default_batch_fetch_size: 100
+        # All tables live in their own schema. On Supabase this keeps them OUT of the
+        # auto-generated Data API (which only exposes "public"), so the public anon key
+        # can't read or write them — only this backend can.
+        default_schema: ${DB_SCHEMA:wanderly}
+        hbm2ddl:
+          create_namespaces: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 40MB
+
+wanderly:
+  jwt:
+    # Base64-encoded HMAC key (>= 256 bits). ALWAYS override JWT_SECRET outside local development.
+    secret: ${JWT_SECRET:d2FuZGVybHktZGV2LXNlY3JldC1rZXktY2hhbmdlLW1lLWluLXByb2R1Y3Rpb24tcGxlYXNlIQ==}
+    expiration-hours: ${JWT_EXPIRATION_HOURS:72}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:*}
+  uploads:
+    dir: ${UPLOAD_DIR:uploads}
+  seed:
+    enabled: ${SEED_DATA:true}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+---
+# Supabase (hosted PostgreSQL): mvnw spring-boot:run -Dspring-boot.run.profiles=supabase
+# Values come from backend/.env — copy .env.example and fill in your project's details.
+spring:
+  config:
+    activate:
+      on-profile: supabase
+  datasource:
+    # Session pooler (port 5432): works over IPv4 and supports prepared statements.
+    # Host/user are shown in Supabase Dashboard → Connect → "Session pooler".
+    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:5432}/${SUPABASE_DB_NAME:postgres}?sslmode=require&ApplicationName=wanderly-api
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    hikari:
+      # Supabase's pooler limits connections per project; a small pool is plenty for this API.
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: 1
+      connection-timeout: 15000
+      keepalive-time: 120000
+      max-lifetime: 600000
+---
+# Run without PostgreSQL: mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:mem:wanderly;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

@@ -1,0 +1,15 @@
+# Keep the build context small and never send secrets into the image.
+.env
+.env.*
+!.env.example
+target/
+uploads/
+.mvn/
+mvnw
+mvnw.cmd
+.idea/
+.vscode/
+*.iml
+*.log
+docker-compose.yml
+README.md

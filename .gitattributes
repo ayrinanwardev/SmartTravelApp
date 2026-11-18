@@ -1,0 +1,7 @@
+# Normalise line endings in the repo; keep shell scripts LF so they run on Linux CI.
+* text=auto
+*.sh text eol=lf
+backend/mvnw text eol=lf
+*.png binary
+*.jpg binary
+*.jar binary

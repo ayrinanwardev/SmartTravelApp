@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: wanderly-postgres
+    environment:
+      POSTGRES_DB: wanderly
+      POSTGRES_USER: wanderly
+      POSTGRES_PASSWORD: wanderly
+    ports:
+      - "5432:5432"
+    volumes:
+      - wanderly-data:/var/lib/postgresql/data
+
+volumes:
+  wanderly-data:
