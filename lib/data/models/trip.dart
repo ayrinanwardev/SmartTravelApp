@@ -79,6 +79,10 @@ class Trip {
     required this.travelers,
     required this.budget,
     required this.days,
+    this.role = 'owner',
+    this.ownerName,
+    this.memberCount = 1,
+    this.shareCode,
   });
 
   final String id;
@@ -90,6 +94,19 @@ class Trip {
   final int travelers;
   final int budget;
   final List<ItineraryDay> days;
+
+  /// Viewer's role in a group trip: "owner" or "member" (joined with a share code).
+  final String role;
+  final String? ownerName;
+
+  /// People on the trip, including the owner.
+  final int memberCount;
+
+  /// Invite code (only sent to the owner).
+  final String? shareCode;
+
+  bool get isOwner => role == 'owner';
+  bool get isGroup => memberCount > 1;
 
   int get dayCount => endDate.difference(startDate).inDays + 1;
   bool get isUpcoming => !endDate.isBefore(DateTime.now());
@@ -113,6 +130,10 @@ class Trip {
         travelers: travelers ?? this.travelers,
         budget: budget ?? this.budget,
         days: days ?? this.days,
+        role: role,
+        ownerName: ownerName,
+        memberCount: memberCount,
+        shareCode: shareCode,
       );
 
   Map<String, dynamic> toJson() => {
@@ -137,5 +158,9 @@ class Trip {
         travelers: j['travelers'] as int,
         budget: j['budget'] as int,
         days: (j['days'] as List).map((e) => ItineraryDay.fromJson(e as Map<String, dynamic>)).toList(),
+        role: (j['role'] as String?) ?? 'owner',
+        ownerName: j['ownerName'] as String?,
+        memberCount: (j['memberCount'] as int?) ?? 1,
+        shareCode: j['shareCode'] as String?,
       );
 }

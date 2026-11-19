@@ -4,6 +4,7 @@ import '../../data/models/destination.dart';
 import '../../data/models/expense.dart';
 import '../../data/models/hotel.dart';
 import '../../data/models/journal_entry.dart';
+import '../../data/models/notification.dart';
 import '../../data/models/trip.dart';
 import 'api_client.dart';
 
@@ -23,7 +24,23 @@ class AuthResult {
   final bool notificationsEnabled;
 }
 
-/// Typed wrapper around the Wanderly Spring Boot REST API (see backend/README.md).
+class PaymentSession {
+  const PaymentSession({required this.bookingId, required this.tranId, required this.gatewayUrl, required this.amount});
+
+  final String bookingId;
+  final String tranId;
+  final String gatewayUrl;
+  final int amount;
+
+  factory PaymentSession.fromJson(Map<String, dynamic> j) => PaymentSession(
+        bookingId: j['bookingId'] as String,
+        tranId: j['tranId'] as String,
+        gatewayUrl: j['gatewayUrl'] as String,
+        amount: j['amount'] as int,
+      );
+}
+
+/// Typed wrapper around the Wanderly Kotlin/Spring Boot REST API (see backend/README.md).
 /// Every method throws [ApiException] with a readable message on failure.
 class WanderlyApi {
   WanderlyApi(this._dio);
@@ -217,6 +234,42 @@ class WanderlyApi {
         'guests': guests,
         'rooms': rooms,
       }));
+
+  Future<Booking> booking(String id) async => Booking.fromJson(await _getMap('/api/bookings/$id'));
+
+  // -------------------------------------------------------------- payments
+
+  /// Starts an SSLCommerz checkout for a booking; returns the hosted payment page URL.
+  Future<PaymentSession> startPayment(String bookingId) async =>
+      PaymentSession.fromJson(await _send('POST', '/api/payments/bookings/$bookingId/session'));
+
+  // ----------------------------------------------------------- group trips
+
+  Future<String> shareTrip(String tripId) async => (await _send('POST', '/api/trips/$tripId/share'))['code'] as String;
+
+  Future<Trip> joinTrip(String code) async => Trip.fromJson(await _send('POST', '/api/trips/join', {'code': code}));
+
+  Future<List<TripMember>> tripMembers(String tripId) async => (await _getList('/api/trips/$tripId/members'))
+      .map((e) => TripMember.fromJson(e as Map<String, dynamic>))
+      .toList();
+
+  Future<void> leaveTrip(String tripId) => _send('DELETE', '/api/trips/$tripId/members/me');
+
+  // --------------------------------------------------------- notifications
+
+  Future<List<AppNotification>> notifications() async => (await _getList('/api/notifications'))
+      .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+      .toList();
+
+  Future<void> markNotificationRead(int id) => _send('PATCH', '/api/notifications/$id/read');
+
+  Future<void> markAllNotificationsRead() => _send('PATCH', '/api/notifications/read-all');
+
+  /// Registers this device's FCM token so the server can push to it.
+  Future<void> registerDevice(String token, String platform) =>
+      _send('POST', '/api/devices', {'token': token, 'platform': platform});
+
+  Future<void> unregisterDevice(String token) => _send('POST', '/api/devices/unregister', {'token': token});
 
   // -------------------------------------------------------------------- AI
 

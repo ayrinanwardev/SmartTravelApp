@@ -62,3 +62,7 @@ backend/uploads/
 
 # Android build output
 /android/build/
+
+# Firebase config (project-specific; add your own)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist

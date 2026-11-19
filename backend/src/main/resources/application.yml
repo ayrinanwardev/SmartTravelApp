@@ -45,6 +45,17 @@ wanderly:
     dir: ${UPLOAD_DIR:uploads}
   seed:
     enabled: ${SEED_DATA:true}
+  payments:
+    # Public URL of this API, used for SSLCommerz success/fail/cancel/IPN callbacks.
+    public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080}
+    sslcommerz:
+      # Defaults = SSLCommerz's public sandbox store (no real money). Use your own for live payments.
+      store-id: ${SSLCOMMERZ_STORE_ID:testbox}
+      store-password: ${SSLCOMMERZ_STORE_PASSWORD:qwerty}
+      sandbox: ${SSLCOMMERZ_SANDBOX:true}
+  push:
+    # Base64 of a Firebase service-account JSON. Empty = FCM disabled (in-app real-time still works).
+    firebase-credentials-base64: ${FIREBASE_CREDENTIALS_BASE64:}
 
 management:
   endpoints:

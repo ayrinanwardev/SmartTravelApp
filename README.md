@@ -2,13 +2,13 @@
 
 # ✈️ Wanderly — Explore Beyond
 
-**A full-stack travel planning app: Flutter mobile client, Spring Boot REST API, PostgreSQL on Supabase, deployed with Docker on Render.**
+**A full-stack, real-time travel app: Flutter (Dart) client, Kotlin + Spring Boot API with WebSockets, SSLCommerz payments, live location sharing and push notifications, on Supabase PostgreSQL, deployed with Docker on Render.**
 
 [![CI](https://github.com/ayrinanwardev/SmartTravelApp/actions/workflows/ci.yml/badge.svg)](https://github.com/ayrinanwardev/SmartTravelApp/actions/workflows/ci.yml)
 ![Flutter](https://img.shields.io/badge/Flutter-3.50-02569B?logo=flutter)
 ![Dart](https://img.shields.io/badge/Dart-3.14-0175C2?logo=dart)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F?logo=springboot)
-![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin)
 ![PostgreSQL](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase)
 ![Docker](https://img.shields.io/badge/Docker-Render-2496ED?logo=docker)
 
@@ -39,7 +39,11 @@
 | 🧭 **Explore** | Search by city or country; filter by category (beach, mountain, city, adventure, culture), max budget and best season; sort by rating or price. |
 | 🏝️ **Destination details** | Photo gallery, highlights, best time to visit, a 5-day weather outlook with activity tips, a per-person cost estimate, attractions and reviews. |
 | 🗓️ **Trip planner** | Pick destination, dates, travellers and budget, then build a day-by-day itinerary: add, edit, swipe-to-delete and **drag-to-reorder** activities. |
-| 🏨 **Hotels & booking** | Hotel list with amenities and ratings; choose dates, guests and rooms, see a live price breakdown and get a confirmation code; booking history. |
+| 🏨 **Hotels & booking** | Hotel list with amenities and ratings; choose dates, guests and rooms, see a live price breakdown and get a confirmation code; booking history with payment status. |
+| 💳 **Payments (SSLCommerz)** | Pay for a booking with bKash, Nagad, Rocket or cards through SSLCommerz's hosted checkout (in-app WebView). The server **re-validates every payment with SSLCommerz** (amount, currency, transaction id) before marking it paid, so a forged callback can't confirm a booking. |
+| 👥 **Group trips (live sync)** | Share a trip with a 6-character code; friends join and edit the same itinerary. Every change reaches the other members instantly over WebSockets, along with "X joined your trip" alerts and online indicators. |
+| 📍 **Live location & maps** | OpenStreetMap maps of destinations, attractions and hotels with "my location" and Google Maps directions. On a group trip, members can share their live location and see each other move on the map in real time. |
+| 🔔 **Notifications** | In-app notification centre with unread badge, updated live over the WebSocket; system notifications for bookings, payments and companions; Firebase Cloud Messaging push when the app is closed. |
 | 💰 **Budget tracker** | Trip budget, expenses by category, pie and bar charts, and alerts at 80% used and when you go over. |
 | 📔 **Travel journal** | Memories with photos (gallery or camera, uploaded to the server), location, date and albums. |
 | ✨ **Trip assistant** | *"Plan a 4-day trip to Cox's Bazar under ৳20,000"* → itinerary, cost breakdown and tips, saved as a trip in one tap. |
@@ -61,10 +65,14 @@ flowchart LR
         Sec["TokenStore<br/>(secure storage)"] --> Repo
     end
 
-    subgraph Render["☁️ Render (Docker container)"]
+    subgraph Render["☁️ Render (Docker container) — Kotlin + Spring Boot"]
         Filter["JWT filter<br/>(Spring Security)"] --> Ctrl["REST controllers"]
         Ctrl --> Svc["Services<br/>(@Transactional)"]
         Svc --> JPA["Spring Data JPA<br/>(Hibernate)"]
+        WS["WebSocket /ws<br/>RealtimeHub"]
+        Svc -- "after commit" --> WS
+        Svc --> Pay["PaymentService"]
+        Svc --> Push["PushService"]
     end
 
     subgraph Supabase["🗄️ Supabase"]
@@ -72,8 +80,26 @@ flowchart LR
     end
 
     Repo -- "HTTPS + Bearer JWT" --> Filter
+    RT["RealtimeClient<br/>(auto-reconnect)"] <-- "WSS: live events,<br/>location" --> WS
+    State --- RT
     JPA -- "IPv4 session pooler (SSL)" --> DB
+    Pay <-- "session + server-side<br/>validation" --> SSL["SSLCommerz"]
+    Push --> FCM["Firebase Cloud<br/>Messaging"]
 ```
+
+### Real-time events
+
+The app keeps one authenticated WebSocket (`/ws?token=<JWT>`) open while signed in. Events are published **only after the database transaction commits**, so clients never see a change that later rolls back.
+
+| Event | When |
+|---|---|
+| `notification.created` | Any new notification (booking, payment, companion joined, budget alert) |
+| `trip.updated` / `trip.deleted` | A member changes or deletes a shared trip |
+| `trip.member_joined` | Someone joins with the share code |
+| `booking.updated` | A payment succeeds or fails |
+| `location.updated` / `location.snapshot` / `location.stopped` | Live location on a group trip |
+
+Payment flow: app → `POST /api/payments/bookings/{id}/session` → SSLCommerz hosted checkout in a WebView → SSLCommerz calls the server's success/fail/IPN endpoints → server validates with SSLCommerz's validation API → booking marked paid → `booking.updated` + notification pushed to the app.
 
 ### Mobile app — feature-first, layered
 
@@ -99,22 +125,25 @@ lib/
 - **Two data modes, one UI.** API mode is the default; `--dart-define=USE_API=false` switches every notifier to bundled mock data with no screen changes, because they depend on interfaces.
 - **Auth flow.** Login returns a JWT → saved in encrypted storage → added to every request by a Dio interceptor. A `401` signs the user out, and the GoRouter guard sends them to the login screen.
 
-### Backend — Spring Boot 4.1 (Java 21)
+### Backend — Kotlin 2.3 + Spring Boot 4.1 (JVM 21)
 
 ```
-backend/src/main/java/com/wanderly/api/
-├── controller/   REST endpoints (validation only, no logic)
+backend/src/main/kotlin/com/wanderly/api/
+├── controller/   REST endpoints (validation only, no logic) + payment callbacks
 ├── service/      Business logic + transactions, entity → DTO mapping
+├── realtime/     WebSocket handler, JWT handshake, RealtimeHub, after-commit publisher
+├── payment/      PaymentGateway interface → SslCommerzGateway, PaymentService
 ├── repository/   Spring Data JPA
-├── domain/       JPA entities (14 tables)
-├── dto/          Request/response records (JSON matches the Flutter models)
+├── domain/       JPA entities (15 entities)
+├── dto/          Request/response data classes (JSON matches the Flutter models)
 ├── security/     JwtService (HS256) + JwtAuthenticationFilter
-├── config/       SecurityConfig, CORS, OpenAPI, data seeder
+├── config/       SecurityConfig, CORS, OpenAPI, data seeder, map-coordinate backfill
 └── exception/    ApiException + GlobalExceptionHandler (RFC 9457 problem+json)
 ```
 
-- **About 40 REST endpoints:** auth, destinations, hotels, bookings, trips and itinerary, wishlist, budget, journal with photo upload, notifications, planner and tools. Full list in [backend/README.md](backend/README.md).
-- **Ownership checks in every service:** a user can never read or change another user's trips, expenses or bookings; other users get a `404`.
+- **About 50 REST endpoints** plus the WebSocket: auth, destinations, hotels, bookings and payments, trips and itinerary, group-trip sharing, wishlist, budget, journal with photo upload, notifications, device registration, planner and tools. Full list in [backend/README.md](backend/README.md).
+- **Access checks in every service:** a user can only reach their own data and the trips they are a member of; others get a `404`. Only a trip's owner can share or delete it. WebSocket messages are checked the same way.
+- **Payment safety:** callbacks from the browser are never trusted. The server asks SSLCommerz to validate each `val_id` and checks amount, currency and transaction id before marking a booking paid.
 - **Stateless JWT security**, BCrypt password hashing, Bean Validation on every request body, OpenAPI/Swagger UI.
 
 ### Data & infrastructure
@@ -146,7 +175,10 @@ backend/src/main/java/com/wanderly/api/
 | State & navigation | Riverpod 3, GoRouter 18 |
 | Networking & storage | Dio 5, flutter_secure_storage, SharedPreferences, cached_network_image |
 | UI | fl_chart, image_picker |
-| Backend | Spring Boot 4.1, Spring Security, Spring Data JPA (Hibernate 7), jjwt, springdoc-openapi |
+| Maps, location, real-time | flutter_map (OpenStreetMap), geolocator, web_socket_channel, webview_flutter |
+| Notifications | firebase_messaging (FCM), flutter_local_notifications |
+| Backend | Kotlin 2.3, Spring Boot 4.1, Spring Security, Spring WebSocket, Spring Data JPA (Hibernate 7), jjwt, Firebase Admin SDK, springdoc-openapi |
+| Payments | SSLCommerz (bKash, Nagad, Rocket, cards) |
 | Database | PostgreSQL on Supabase (H2 for local dev and tests) |
 | DevOps | Docker, Docker Hub, Render, GitHub Actions |
 | Testing | flutter_test, JUnit 5, MockMvc, AssertJ |
@@ -156,7 +188,7 @@ backend/src/main/java/com/wanderly/api/
 ## 🚀 Getting started
 
 ### Prerequisites
-Flutter 3.50+, Java 21, and an Android device or emulator. Docker is optional.
+Flutter 3.50+, JDK 21 (the Maven wrapper downloads Kotlin), and an Android device or emulator. Docker is optional.
 
 ### 1. Backend
 ```bash
@@ -202,7 +234,7 @@ cd backend && mvnw.cmd test
 ```
 
 - **Flutter (11 tests):** the planner's parsing (days, travellers, "20k", "2 lakh"), JSON parsing of real API payloads, wishlist, activity reordering, budget alerts, and token storage on sign-in/sign-out.
-- **Backend (12 tests):** full-stack integration tests (real Spring context, H2, JWT). They cover the catalogue and filters, 401 without a token, login, duplicate sign-up, the trip lifecycle including reorder and cross-user isolation, saving a planner result as a trip, booking prices, budget alerts, notifications, tools and the OpenAPI docs.
+- **Backend (15 tests):** full-stack integration tests (real Spring context, H2, JWT). They cover the catalogue with map coordinates, 401 without a token, login, duplicate sign-up, the trip lifecycle, group trips (share, join, member permissions), payments (session, valid callback, **forged callback rejected**), the planner, budget alerts, notifications and devices, tools and the OpenAPI docs. A separate test starts a real server and connects real WebSocket clients: handshake refused without a token, live notifications, member-joined, location sharing and snapshots, outsider rejection, trip updates.
 
 ---
 
@@ -211,7 +243,10 @@ cd backend && mvnw.cmd test
 - Journal photos are stored on the container's disk and are wiped when Render redeploys → move them to Supabase Storage.
 - Render's free plan sleeps after 15 minutes idle, so the first request can take about a minute.
 - Weather, exchange rates and flight fares are simulated → connect live APIs.
-- Next: Flyway migrations, Google Maps screen, an LLM-backed trip assistant, group trips with expense splitting, push notifications (FCM).
+- Payments run against the **SSLCommerz sandbox** (`testbox`); live payments need a merchant account.
+- Push notifications need your own Firebase project (`google-services.json` + `FIREBASE_CREDENTIALS_BASE64`); without it, notifications still arrive in real time while the app is open.
+- Live connections are kept in one server's memory → use a Redis pub/sub broker to run more than one instance.
+- Next: Flyway migrations, an LLM-backed trip assistant, expense splitting for group trips.
 
 ---
 

@@ -17,6 +17,22 @@ class BookingsNotifier extends Notifier<List<Booking>> with RemoteSync<List<Book
   @override
   Future<void> refresh() => safeRefresh((a) => a.bookings());
 
+  /// Inserts or replaces a booking (e.g. live payment status from the WebSocket).
+  void upsert(Booking b) {
+    final exists = state.any((x) => x.id == b.id);
+    final next = exists ? [for (final x in state) x.id == b.id ? b : x] : [b, ...state];
+    state = next;
+    if (api == null) ref.read(localStoreProvider).writeList(LocalStore.bookingsKey, next, (x) => x.toJson());
+  }
+
+  Booking? byId(String id) => state.where((b) => b.id == id).firstOrNull;
+
+  /// Offline demo mode only: simulates a successful gateway payment.
+  void markPaidOffline(String id) {
+    final b = byId(id);
+    if (b != null) upsert(b.copyWith(paymentStatus: PaymentStatus.paid, paymentMethod: 'DEMO-Offline'));
+  }
+
   /// Books a stay. The server prices it and issues the confirmation code in API mode;
   /// offline mode applies the same pricing rule (nightly rate × nights × rooms + 10% tax).
   Future<Booking> book({

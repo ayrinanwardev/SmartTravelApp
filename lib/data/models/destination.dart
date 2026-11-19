@@ -28,6 +28,8 @@ class Attraction {
     required this.imageUrl,
     required this.rating,
     this.distanceKm = 0,
+    this.latitude,
+    this.longitude,
   });
 
   final String name;
@@ -35,6 +37,10 @@ class Attraction {
   final String imageUrl;
   final double rating;
   final double distanceKm;
+  final double? latitude;
+  final double? longitude;
+
+  bool get hasLocation => latitude != null && longitude != null;
 
   factory Attraction.fromJson(Map<String, dynamic> j) => Attraction(
         name: j['name'] as String,
@@ -42,6 +48,8 @@ class Attraction {
         imageUrl: (j['imageUrl'] as String?) ?? '',
         rating: (j['rating'] as num?)?.toDouble() ?? 0,
         distanceKm: (j['distanceKm'] as num?)?.toDouble() ?? 0,
+        latitude: (j['latitude'] as num?)?.toDouble(),
+        longitude: (j['longitude'] as num?)?.toDouble(),
       );
 }
 
@@ -112,6 +120,8 @@ class Destination {
     required this.avgTempC,
     this.isTrending = false,
     this.isPopular = false,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -133,6 +143,10 @@ class Destination {
   final int avgTempC;
   final bool isTrending;
   final bool isPopular;
+  final double? latitude;
+  final double? longitude;
+
+  bool get hasLocation => latitude != null && longitude != null;
 
   /// Parses the API's `DestinationDetail` JSON (enums arrive in lower case, like Dart's).
   factory Destination.fromJson(Map<String, dynamic> j) {
@@ -159,6 +173,8 @@ class Destination {
       avgTempC: (j['avgTempC'] as int?) ?? 20,
       isTrending: (j['isTrending'] as bool?) ?? false,
       isPopular: (j['isPopular'] as bool?) ?? false,
+      latitude: (j['latitude'] as num?)?.toDouble(),
+      longitude: (j['longitude'] as num?)?.toDouble(),
     );
   }
 

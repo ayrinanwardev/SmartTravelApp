@@ -86,6 +86,19 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
               child: CircleIconButton(icon: Icons.arrow_back_rounded, onPressed: () => context.pop()),
             ),
             actions: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.coral,
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onPressed: () => context.push('/trip/${trip.id}/live'),
+                  icon: const Icon(Icons.share_location_rounded, size: 18),
+                  label: Text(trip.isGroup ? 'Live · ${trip.memberCount}' : 'Live'),
+                ),
+              ),
               PopupMenuButton<String>(
                 iconColor: Colors.white,
                 onSelected: (v) {
@@ -96,15 +109,20 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
                       context.push('/hotels?dest=${trip.destinationId}');
                     case 'pack':
                       context.push('/packing?dest=${trip.destinationId}&days=${trip.dayCount}');
+                    case 'map':
+                      context.push('/map?dest=${trip.destinationId}');
                     case 'delete':
                       _deleteTrip(trip);
                   }
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'dest', child: Text('View destination')),
-                  PopupMenuItem(value: 'hotels', child: Text('Find hotels')),
-                  PopupMenuItem(value: 'pack', child: Text('Packing checklist')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete trip', style: TextStyle(color: AppColors.danger))),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'dest', child: Text('View destination')),
+                  const PopupMenuItem(value: 'map', child: Text('Map & directions')),
+                  const PopupMenuItem(value: 'hotels', child: Text('Find hotels')),
+                  const PopupMenuItem(value: 'pack', child: Text('Packing checklist')),
+                  // Only the owner can delete a (group) trip; companions can leave it from Live.
+                  if (trip.isOwner)
+                    const PopupMenuItem(value: 'delete', child: Text('Delete trip', style: TextStyle(color: AppColors.danger))),
                 ],
               ),
             ],
