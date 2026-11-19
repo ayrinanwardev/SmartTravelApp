@@ -11,7 +11,10 @@ import '../../features/destination/presentation/destination_details_screen.dart'
 import '../../features/explore/presentation/explore_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/hotels/presentation/hotels_screens.dart';
+import '../../features/hotels/presentation/payment_screen.dart';
 import '../../features/journal/presentation/journal_screen.dart';
+import '../../features/map/presentation/map_screen.dart';
+import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/onboarding/presentation/splash_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
@@ -20,6 +23,7 @@ import '../../features/shell/presentation/app_shell.dart';
 import '../../features/tools/presentation/currency_screen.dart';
 import '../../features/tools/presentation/flights_screen.dart';
 import '../../features/tools/presentation/packing_screen.dart';
+import '../../features/trips/presentation/live_trip_screen.dart';
 import '../../features/trips/presentation/my_trips_screen.dart';
 import '../../features/trips/presentation/trip_detail_screen.dart';
 import '../../features/trips/presentation/trip_planner_screen.dart';
@@ -99,6 +103,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) => BookingConfirmedScreen(bookingId: s.pathParameters['id']!),
       ),
       GoRoute(parentNavigatorKey: _rootKey, path: '/bookings', builder: (_, _) => const BookingHistoryScreen()),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/pay/:bookingId',
+        builder: (_, s) => PaymentScreen(bookingId: s.pathParameters['bookingId']!),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/trip/:id/live',
+        builder: (_, s) => LiveTripScreen(tripId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/map',
+        builder: (_, s) => MapScreen(destinationId: s.uri.queryParameters['dest']),
+      ),
+      GoRoute(parentNavigatorKey: _rootKey, path: '/notifications', builder: (_, _) => const NotificationsScreen()),
       GoRoute(parentNavigatorKey: _rootKey, path: '/budget', builder: (_, _) => const BudgetScreen()),
       GoRoute(
         parentNavigatorKey: _rootKey,

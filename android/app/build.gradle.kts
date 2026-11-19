@@ -17,14 +17,23 @@ if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// Push notifications: add google-services.json from your Firebase project to this folder
+// (android/app/) to enable FCM. Without it the app builds and runs; push is simply off.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.wanderly.app"
-    compileSdk = flutter.compileSdkVersion
+    // 37: flutter_local_notifications and androidx.core 1.19 need it (targetSdk is unchanged).
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications (java.time on older Android versions).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -66,4 +75,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

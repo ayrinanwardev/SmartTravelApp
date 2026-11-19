@@ -11,6 +11,8 @@ class Hotel {
     required this.amenities,
     required this.description,
     this.stars = 4,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -24,6 +26,10 @@ class Hotel {
   final List<String> amenities;
   final String description;
   final int stars;
+  final double? latitude;
+  final double? longitude;
+
+  bool get hasLocation => latitude != null && longitude != null;
 
   factory Hotel.fromJson(Map<String, dynamic> j) => Hotel(
         id: j['id'] as String,
@@ -37,6 +43,8 @@ class Hotel {
         amenities: ((j['amenities'] as List?) ?? const []).cast<String>(),
         description: (j['description'] as String?) ?? '',
         stars: (j['stars'] as int?) ?? 3,
+        latitude: (j['latitude'] as num?)?.toDouble(),
+        longitude: (j['longitude'] as num?)?.toDouble(),
       );
 }
 
@@ -52,6 +60,9 @@ class Booking {
     required this.rooms,
     required this.total,
     required this.createdAt,
+    this.paymentStatus = PaymentStatus.unpaid,
+    this.paymentMethod,
+    this.cancelled = false,
   });
 
   final String id;
@@ -64,8 +75,31 @@ class Booking {
   final int rooms;
   final int total;
   final DateTime createdAt;
+  final PaymentStatus paymentStatus;
+
+  /// e.g. "BKASH-BKash" — set by the gateway once paid.
+  final String? paymentMethod;
+  final bool cancelled;
 
   int get nights => checkOut.difference(checkIn).inDays;
+  bool get isPaid => paymentStatus == PaymentStatus.paid;
+  bool get canPay => !cancelled && !isPaid;
+
+  Booking copyWith({PaymentStatus? paymentStatus, String? paymentMethod}) => Booking(
+        id: id,
+        hotelId: hotelId,
+        hotelName: hotelName,
+        imageUrl: imageUrl,
+        checkIn: checkIn,
+        checkOut: checkOut,
+        guests: guests,
+        rooms: rooms,
+        total: total,
+        createdAt: createdAt,
+        paymentStatus: paymentStatus ?? this.paymentStatus,
+        paymentMethod: paymentMethod ?? this.paymentMethod,
+        cancelled: cancelled,
+      );
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -78,6 +112,9 @@ class Booking {
         'rooms': rooms,
         'total': total,
         'createdAt': createdAt.toIso8601String(),
+        'paymentStatus': paymentStatus.name,
+        'paymentMethod': paymentMethod,
+        'status': cancelled ? 'cancelled' : 'confirmed',
       };
 
   factory Booking.fromJson(Map<String, dynamic> j) => Booking(
@@ -91,5 +128,11 @@ class Booking {
         rooms: j['rooms'] as int,
         total: j['total'] as int,
         createdAt: DateTime.parse(j['createdAt'] as String),
+        // Older offline bookings have no payment status: treat them as paid.
+        paymentStatus: PaymentStatus.values.asNameMap()[j['paymentStatus']] ?? PaymentStatus.paid,
+        paymentMethod: j['paymentMethod'] as String?,
+        cancelled: j['status'] == 'cancelled',
       );
 }
+
+enum PaymentStatus { unpaid, paid, failed }

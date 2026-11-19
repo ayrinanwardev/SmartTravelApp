@@ -313,7 +313,8 @@ class _HotelDetailScreenState extends ConsumerState<HotelDetailScreen> {
                     );
                     if (!context.mounted) return;
                     setState(() => _booking = false);
-                    if (booking != null) context.pushReplacement('/booking-confirmed/${booking.id}');
+                    // Reserved (unpaid) → straight to secure checkout.
+                    if (booking != null) context.pushReplacement('/pay/${booking.id}');
                   },
             child: _booking
                 ? const SizedBox(
@@ -401,10 +402,12 @@ class BookingConfirmedScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Text('Booking confirmed!', style: Theme.of(context).textTheme.headlineMedium),
+                    Text(b.isPaid ? 'Booking confirmed!' : 'Awaiting payment', style: Theme.of(context).textTheme.headlineMedium),
                     const SizedBox(height: 8),
                     Text('Confirmation #${b.id}', style: Theme.of(context).textTheme.bodyMedium),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 8),
+                    PaymentStatusChip(booking: b),
+                    const SizedBox(height: 20),
                     Card(
                       clipBehavior: Clip.antiAlias,
                       child: Column(
@@ -421,6 +424,14 @@ class BookingConfirmedScreen extends ConsumerWidget {
                       ),
                     ),
                     const Spacer(),
+                    if (b.canPay) ...[
+                      FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
+                        onPressed: () => context.pushReplacement('/pay/${b.id}'),
+                        child: Text('Pay ${Fmt.bdt(b.total)}'),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     FilledButton(onPressed: () => context.go('/trips'), child: const Text('Go to My Trips')),
                     const SizedBox(height: 12),
                     OutlinedButton(onPressed: () => context.go('/home'), child: const Text('Back to Home')),
@@ -455,17 +466,79 @@ class BookingHistoryScreen extends ConsumerWidget {
               itemBuilder: (_, i) {
                 final b = bookings[i];
                 return Card(
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(10),
-                    leading: NetImage(b.imageUrl, width: 64, height: 64, borderRadius: BorderRadius.circular(12)),
-                    title: Text(b.hotelName, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('${Fmt.range(b.checkIn, b.checkOut)}\n#${b.id}'),
-                    isThreeLine: true,
-                    trailing: Text(Fmt.bdt(b.total), style: const TextStyle(fontWeight: FontWeight.w800)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            NetImage(b.imageUrl, width: 64, height: 64, borderRadius: BorderRadius.circular(12)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(b.hotelName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                  Text('${Fmt.range(b.checkIn, b.checkOut)} · #${b.id}',
+                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                  const SizedBox(height: 6),
+                                  PaymentStatusChip(booking: b),
+                                ],
+                              ),
+                            ),
+                            Text(Fmt.bdt(b.total), style: const TextStyle(fontWeight: FontWeight.w800)),
+                          ],
+                        ),
+                        if (b.canPay)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () => context.push('/pay/${b.id}'),
+                              icon: const Icon(Icons.lock_rounded, size: 18),
+                              label: const Text('Pay now'),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 );
               },
             ),
+    );
+  }
+}
+
+/// "Paid · bKash", "Awaiting payment", "Payment failed" or "Cancelled".
+class PaymentStatusChip extends StatelessWidget {
+  const PaymentStatusChip({super.key, required this.booking});
+
+  final Booking booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final b = booking;
+    final (label, color, icon) = b.cancelled
+        ? ('Cancelled', AppColors.textSecondary, Icons.block_rounded)
+        : switch (b.paymentStatus) {
+            PaymentStatus.paid => (
+                'Paid${b.paymentMethod != null ? ' · ${b.paymentMethod!.split('-').last}' : ''}',
+                AppColors.success,
+                Icons.verified_rounded,
+              ),
+            PaymentStatus.failed => ('Payment failed', AppColors.danger, Icons.error_outline_rounded),
+            PaymentStatus.unpaid => ('Awaiting payment', AppColors.warning, Icons.schedule_rounded),
+          };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+        ],
+      ),
     );
   }
 }

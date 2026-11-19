@@ -216,7 +216,9 @@ class _DestinationDetailsScreenState
               ],
             ),
           ),
-          const SliverToBoxAdapter(child: SectionHeader('Popular attractions')),
+          SliverToBoxAdapter(
+            child: SectionHeader('Popular attractions', action: 'View on map', onAction: () => context.push('/map?dest=${d.id}')),
+          ),
           SliverToBoxAdapter(
             child: SizedBox(
               height: 210,

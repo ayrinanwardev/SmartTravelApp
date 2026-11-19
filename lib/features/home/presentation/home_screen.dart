@@ -10,6 +10,7 @@ import '../../../core/widgets/destination_cards.dart';
 import '../../../data/models/destination.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../saved/providers/wishlist_provider.dart';
+import '../../notifications/presentation/notifications_screen.dart';
 import '../../trips/providers/trips_provider.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -50,6 +51,8 @@ class HomeScreen extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      const NotificationBell(),
+                      const SizedBox(width: 10),
                       GestureDetector(
                         onTap: () => context.go('/profile'),
                         child: CircleAvatar(
@@ -200,6 +203,7 @@ class _QuickActions extends StatelessWidget {
       (Icons.auto_awesome_rounded, 'AI Planner', AppColors.coral, '/assistant'),
       (Icons.account_balance_wallet_rounded, 'Budget', AppColors.success, '/budget'),
       (Icons.currency_exchange_rounded, 'Currency', AppColors.warning, '/currency'),
+      (Icons.map_rounded, 'Map', AppColors.ocean, '/map'),
       (Icons.checklist_rounded, 'Packing', const Color(0xFF0EA5E9), '/packing'),
     ];
     return SizedBox(

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_client.dart';
 import '../../../core/network/remote_sync.dart';
 import '../../../core/providers.dart';
 import '../../../data/local/local_store.dart';
@@ -114,6 +115,22 @@ class TripsNotifier extends Notifier<List<Trip>> with RemoteSync<List<Trip>> {
     if (client == null || trip == null) return;
     final ids = trip.days[dayIndex].activities.map((a) => a.id).toList();
     await _sync(() => client.reorderActivities(tripId, dayIndex + 1, ids));
+  }
+
+  /// Joins a friend's trip with its invite code (group trips need the server).
+  Future<Trip> join(String code) async {
+    final client = api;
+    if (client == null) throw ApiException('Joining a friend\'s trip needs the online server.');
+    final trip = await client.joinTrip(code.trim().toUpperCase());
+    _upsert(trip);
+    return trip;
+  }
+
+  Future<void> leave(String tripId) async {
+    final client = api;
+    if (client == null) return;
+    await client.leaveTrip(tripId);
+    _set(state.where((t) => t.id != tripId).toList());
   }
 
   static List<ItineraryDay> emptyDays(int count) =>

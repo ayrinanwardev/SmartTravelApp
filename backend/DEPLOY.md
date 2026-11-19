@@ -4,7 +4,7 @@
 Flutter app ──HTTPS──► Render (Docker container: Spring Boot + JWT) ──IPv4 pooler──► Supabase (Tokyo)
 ```
 
-The image contains Java 21 and the app jar. The jar already bundles everything: Spring Boot, Spring Security, the JWT libraries (jjwt) and the PostgreSQL driver. Secrets are **not** baked into the image; they're passed in at runtime.
+The image contains a Java 21 runtime and the app jar (the Kotlin code compiles to ordinary JVM bytecode, and the Kotlin standard library is inside the jar). The jar already bundles everything: Spring Boot, Spring WebSocket, the Firebase Admin SDK, Spring Security, the JWT libraries (jjwt) and the PostgreSQL driver. Secrets are **not** baked into the image; they're passed in at runtime.
 
 ---
 
@@ -100,8 +100,12 @@ The repository can stay **public**: the image contains no secrets. If you make i
 | `JWT_SECRET` | a **new** random key; generate one in PowerShell: `$b=New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)` |
 | `SEED_DATA` | `true` (it only seeds when the tables are empty) |
 | `CORS_ORIGINS` | `*` (fine for a mobile app; restrict it if you add a website) |
+| `PUBLIC_BASE_URL` | `https://wanderly-api-latest.onrender.com` (**required for payments**: SSLCommerz redirects and IPN go here) |
+| `SSLCOMMERZ_STORE_ID` / `SSLCOMMERZ_STORE_PASSWORD` | Optional. Defaults to the public sandbox store `testbox`; set your merchant credentials for real payments |
+| `SSLCOMMERZ_SANDBOX` | `true` (set `false` only with live merchant credentials) |
+| `FIREBASE_CREDENTIALS_BASE64` | Optional. Base64 of the Firebase service-account JSON to turn on push notifications |
 
-Click **Deploy**. Render sets `PORT` itself and the app uses it. Verify:
+Click **Deploy**. Render sets `PORT` itself and the app uses it. WebSockets work on Render out of the box: the app connects to `wss://wanderly-api-latest.onrender.com/ws`. Verify:
 ```
 https://wanderly-api-latest.onrender.com/actuator/health
 https://wanderly-api-latest.onrender.com/api/destinations

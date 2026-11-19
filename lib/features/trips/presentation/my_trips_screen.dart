@@ -25,6 +25,11 @@ class MyTripsScreen extends ConsumerWidget {
           toolbarHeight: 64,
           actions: [
             IconButton(
+              tooltip: 'Join a friend\'s trip',
+              onPressed: () => _joinTrip(context, ref),
+              icon: const Icon(Icons.group_add_rounded),
+            ),
+            IconButton(
               tooltip: 'Travel journal',
               onPressed: () => context.push('/journal'),
               icon: const Icon(Icons.auto_stories_rounded),
@@ -70,6 +75,40 @@ class MyTripsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Asks for a friend's invite code and joins their trip (group trip).
+Future<void> _joinTrip(BuildContext context, WidgetRef ref) async {
+  final controller = TextEditingController();
+  final code = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Join a friend\'s trip'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        textCapitalization: TextCapitalization.characters,
+        maxLength: 8,
+        style: const TextStyle(letterSpacing: 4, fontWeight: FontWeight.w800, fontSize: 20),
+        decoration: const InputDecoration(hintText: 'K7QX2M', helperText: 'Ask the trip owner for the invite code'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size(96, 44)),
+          onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+          child: const Text('Join'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (code == null || code.length < 6 || !context.mounted) return;
+  final trip = await runApi(context, ref.read(tripsProvider.notifier).join(code));
+  if (trip != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You joined ${trip.title}')));
+    context.push('/trip/${trip.id}');
   }
 }
 
