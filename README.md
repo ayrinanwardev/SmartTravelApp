@@ -20,14 +20,16 @@
 
 ## 🎬 Demo
 
-Recorded on a real phone (Xiaomi Poco F3, Android 13) with the release build, running against the Kotlin backend and Supabase. The trip companions "Rafi" and "Nadia" are test accounts driven by a script over the same WebSocket API the app uses.
+Recorded on a real phone (Xiaomi Poco F3, Android 13) with the release build. The API runs from the **production Docker image** (`ayrinanwardev/wanderly-api:2.0.1`, capped at 512 MB like Render's free plan) against Supabase PostgreSQL. The phone reaches it through `adb reverse`. The trip companions "Rafi" and "Nadia" are test accounts, driven by a script over the same WebSocket API the app uses.
 
 | Maps | Live group trip | SSLCommerz payment | Notifications |
 |:---:|:---:|:---:|:---:|
 | <img src="docs/demo/maps.gif" width="200"> | <img src="docs/demo/live-trip.gif" width="200"> | <img src="docs/demo/payment.gif" width="200"> | <img src="docs/demo/notifications.gif" width="200"> |
 | All destinations on OpenStreetMap; attraction and hotel pins per destination | Friends join with a code, walk along Cox's Bazar beach live, and add an activity that appears instantly | Booking → SSLCommerz sandbox (bKash) → validated by the server → paid | Live notification centre, unread badge, in-app alerts and a system notification while the app is in the background |
 
-▶️ **Full walkthrough (2:50, MP4):** [docs/demo/wanderly-demo.mp4](docs/demo/wanderly-demo.mp4)
+▶️ **Full walkthrough (3:01, MP4):** [docs/demo/wanderly-demo.mp4](docs/demo/wanderly-demo.mp4)
+
+<sub>The background system-notification clip comes from an earlier run of the same build against the Kotlin API outside Docker. Everything else in the video is the Docker run.</sub>
 
 ---
 
@@ -302,7 +304,7 @@ cd backend && mvnw.cmd test
 
 ---
 
-### On-device test (Xiaomi Poco F3, Android 13, release build)
+### On-device test (Xiaomi Poco F3, Android 13, release build, API in Docker)
 
 | Feature | How it was tested | Result |
 |---|---|---|
@@ -316,7 +318,7 @@ cd backend && mvnw.cmd test
 | In-app and system notifications | Events while the app was open and in the background | ✅ snackbar, badge, notification centre, system notification |
 | Firebase push with the app fully closed | Needs a Firebase project (`google-services.json`) | ⏳ not yet configured |
 
-A scripted end-to-end check (`dart`, against the Kotlin API on Supabase and against the Docker image) also covers: invalid-token WebSocket refusal, location snapshots, a **forged payment callback being rejected**, fresh transaction ids on retry, and clean-up.
+The container used 375–412 MB of its 512 MB limit during the run, with no out-of-memory kills. A scripted end-to-end check (`dart`, against the Kotlin API on Supabase and against the Docker image) also covers: invalid-token WebSocket refusal, location snapshots, a **forged payment callback being rejected**, fresh transaction ids on retry, and clean-up.
 
 ---
 
