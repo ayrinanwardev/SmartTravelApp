@@ -18,6 +18,19 @@
 
 ---
 
+## 🎬 Demo
+
+Recorded on a real phone (Xiaomi Poco F3, Android 13) with the release build, running against the Kotlin backend and Supabase. The trip companions "Rafi" and "Nadia" are test accounts driven by a script over the same WebSocket API the app uses.
+
+| Maps | Live group trip | SSLCommerz payment | Notifications |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/demo/maps.gif" width="200"> | <img src="docs/demo/live-trip.gif" width="200"> | <img src="docs/demo/payment.gif" width="200"> | <img src="docs/demo/notifications.gif" width="200"> |
+| All destinations on OpenStreetMap; attraction and hotel pins per destination | Friends join with a code, walk along Cox's Bazar beach live, and add an activity that appears instantly | Booking → SSLCommerz sandbox (bKash) → validated by the server → paid | Live notification centre, unread badge, in-app alerts and a system notification while the app is in the background |
+
+▶️ **Full walkthrough (2:50, MP4):** [docs/demo/wanderly-demo.mp4](docs/demo/wanderly-demo.mp4)
+
+---
+
 ## 📸 Screenshots
 
 | Sign in | Home | Explore |
@@ -99,7 +112,49 @@ The app keeps one authenticated WebSocket (`/ws?token=<JWT>`) open while signed 
 | `booking.updated` | A payment succeeds or fails |
 | `location.updated` / `location.snapshot` / `location.stopped` | Live location on a group trip |
 
-Payment flow: app → `POST /api/payments/bookings/{id}/session` → SSLCommerz hosted checkout in a WebView → SSLCommerz calls the server's success/fail/IPN endpoints → server validates with SSLCommerz's validation API → booking marked paid → `booking.updated` + notification pushed to the app.
+### Live location sharing
+
+Positions travel only over the WebSocket and are kept **in memory** on the server, never written to the database. Sharing is opt-in per trip and stops when the member leaves the screen or disconnects.
+
+```mermaid
+sequenceDiagram
+    participant A as Rafi's phone
+    participant S as Kotlin API (RealtimeHub)
+    participant B as Owner's phone
+    B->>S: trip.watch {tripId}
+    S->>S: is B a member of the trip?
+    S-->>B: location.snapshot (who is sharing right now)
+    loop every GPS update (≥ 5 m moved)
+        A->>S: location.update {tripId, lat, lng, accuracy}
+        S->>S: is A a member? keep latest position
+        S-->>B: location.updated {userId, name, lat, lng}
+    end
+    A->>S: location.stop (switch off, leave screen or disconnect)
+    S-->>B: location.stopped → pin removed
+```
+
+### Payment flow (SSLCommerz)
+
+```mermaid
+sequenceDiagram
+    participant App as Flutter app
+    participant API as Kotlin API
+    participant SSL as SSLCommerz
+    App->>API: POST /api/bookings (booking reserved, unpaid)
+    App->>API: POST /api/payments/bookings/{id}/session
+    API->>SSL: create session (amount, tran_id, callback URLs)
+    SSL-->>API: GatewayPageURL
+    API-->>App: gatewayUrl
+    App->>SSL: hosted checkout in a WebView (bKash, Nagad, cards…)
+    SSL->>API: POST /api/payments/sslcommerz/success {tran_id, val_id}
+    API->>SSL: validationserverAPI(val_id)
+    SSL-->>API: VALID + amount + currency + tran_id
+    API->>API: all three match the booking? → mark PAID
+    API-->>App: 303 → /payments/result (WebView closes)
+    API-->>App: WebSocket booking.updated + notification.created
+```
+
+A forged or replayed callback fails the validation step, and the booking is marked `failed` instead of paid. The IPN endpoint goes through the same validation, so a payment is confirmed even if the user closes the app during checkout.
 
 ### Mobile app — feature-first, layered
 
@@ -107,12 +162,16 @@ Payment flow: app → `POST /api/payments/bookings/{id}/session` → SSLCommerz 
 lib/
 ├── core/
 │   ├── network/      Dio client + JWT interceptor, WanderlyApi (one method per endpoint),
-│   │                 TokenStore (encrypted), RemoteSync mixin
+│   │                 TokenStore (encrypted), RemoteSync mixin,
+│   │                 RealtimeClient (WebSocket, auto-reconnect with backoff, heartbeat)
+│   ├── location/     LocationService (permissions, current position, position stream)
+│   ├── notifications/ Local notifications + Firebase Cloud Messaging registration
 │   ├── router/       GoRouter: bottom-tab shell + auth guard (redirects to /login)
 │   ├── theme/        Material 3 theme, brand colours
 │   └── widgets/      Shared UI (cards, image loader, error snackbars)
 ├── data/
-│   ├── models/       Destination, Trip, Activity, Hotel, Booking, Expense, JournalEntry (+ JSON)
+│   ├── models/       Destination, Trip, Activity, Hotel, Booking (+ payment status), Expense,
+│   │                 JournalEntry, AppNotification, TripMember, MemberLocation (+ JSON)
 │   ├── repositories/ TravelRepository interface → ApiTravelRepository | MockTravelRepository
 │   └── local/        LocalStore (SharedPreferences cache)
 └── features/<feature>/
@@ -124,6 +183,8 @@ lib/
 - **Optimistic updates with rollback.** Deletes, reorders and the wishlist heart update the UI immediately. If the server call fails, the notifier reloads the server's data and the UI shows a readable error.
 - **Two data modes, one UI.** API mode is the default; `--dart-define=USE_API=false` switches every notifier to bundled mock data with no screen changes, because they depend on interfaces.
 - **Auth flow.** Login returns a JWT → saved in encrypted storage → added to every request by a Dio interceptor. A `401` signs the user out, and the GoRouter guard sends them to the login screen.
+- **One real-time connection.** `realtimeProvider` opens the WebSocket when a user signs in and closes it on sign-out. `realtimeSyncProvider` routes events to the right notifier: new notifications, a trip reload, or a booking's payment status. It shows a snackbar in the foreground and a system notification in the background. Screens such as Live trip subscribe to the same stream.
+- **New feature screens:** `map/` (OpenStreetMap via flutter_map, pins, distance, directions), `trips/live_trip_screen` (members, invite code, live locations), `hotels/payment_screen` (WebView checkout that catches the `/payments/result` redirect), `notifications/` (notification centre and bell badge).
 
 ### Backend — Kotlin 2.3 + Spring Boot 4.1 (JVM 21)
 
@@ -164,6 +225,9 @@ backend/src/main/kotlin/com/wanderly/api/
 | Supabase publishes the `public` schema through a public API key | Moved every table into a private schema | Data reachable only through the authenticated API |
 | Token stored in plain-text SharedPreferences | Moved it to encrypted secure storage, with automatic migration of the old token | Existing users stay signed in |
 | Unclear whether the app would fit Render's 512 MB limit | Ran the full end-to-end test suite against the container capped at 512 MB | ~311 MB used (61%), no out-of-memory kills |
+| Payment "success" redirects come from the user's browser and could be forged | Never trust the callback: the server validates every `val_id` with SSLCommerz and matches amount, currency and transaction id | Forged callback test → booking marked `failed`, not paid |
+| A live event could announce a change whose transaction later rolls back | Events are queued with `afterCommit` and sent only once the database commit succeeds | Clients never see phantom updates |
+| Supabase's pooler silently closed idle DB connections, failing the next request | Shorter Hikari `keepalive-time` (60 s) and `max-lifetime` (5 min) | Connections are recycled before the pooler drops them |
 
 ---
 
@@ -238,13 +302,31 @@ cd backend && mvnw.cmd test
 
 ---
 
+### On-device test (Xiaomi Poco F3, Android 13, release build)
+
+| Feature | How it was tested | Result |
+|---|---|---|
+| Map of all destinations, pin cards, directions | Tapped pins on the world map | ✅ |
+| Destination map with attraction and hotel pins and filters | Sajek Valley → View on map, toggled the filter chips | ✅ |
+| Group trip: join by code | Two scripted companions joined with the invite code | ✅ members list 1 → 3 instantly, "joined" alerts |
+| Live location of companions | Companions walked along Cox's Bazar beach over the WebSocket | ✅ pins move in real time |
+| Sharing the phone's own GPS location | Switched on "Share my live location"; a companion listened on the socket | ✅ received; switching off sent `location.stopped` |
+| Live itinerary sync | A companion added an activity | ✅ appeared on the owner's phone without refresh |
+| SSLCommerz payment | Booked a hotel and paid in the sandbox with bKash | ✅ server-validated, booking shows **Paid · BKash** |
+| In-app and system notifications | Events while the app was open and in the background | ✅ snackbar, badge, notification centre, system notification |
+| Firebase push with the app fully closed | Needs a Firebase project (`google-services.json`) | ⏳ not yet configured |
+
+A scripted end-to-end check (`dart`, against the Kotlin API on Supabase and against the Docker image) also covers: invalid-token WebSocket refusal, location snapshots, a **forged payment callback being rejected**, fresh transaction ids on retry, and clean-up.
+
+---
+
 ## ⚠️ Known limitations & roadmap
 
 - Journal photos are stored on the container's disk and are wiped when Render redeploys → move them to Supabase Storage.
 - Render's free plan sleeps after 15 minutes idle, so the first request can take about a minute.
 - Weather, exchange rates and flight fares are simulated → connect live APIs.
 - Payments run against the **SSLCommerz sandbox** (`testbox`); live payments need a merchant account.
-- Push notifications need your own Firebase project (`google-services.json` + `FIREBASE_CREDENTIALS_BASE64`); without it, notifications still arrive in real time while the app is open.
+- Push notifications need your own Firebase project (`google-services.json` + `FIREBASE_CREDENTIALS_BASE64`). Without it, notifications still arrive in real time while the app is open or in the background, but not after the app has been closed.
 - Live connections are kept in one server's memory → use a Redis pub/sub broker to run more than one instance.
 - Next: Flyway migrations, an LLM-backed trip assistant, expense splitting for group trips.
 
